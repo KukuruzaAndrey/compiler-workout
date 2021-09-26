@@ -41,10 +41,32 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)
-    let eval _ = failwith "Not implemented yet"
+    let int_to_bool i = i <> 0
+    let bool_to_int b = if b then 1 else 0
+    let op_to_func op = match op with
+      | "+"  -> ( + )
+      | "-"  -> ( - )
+      | "*"  -> ( * )
+      | "/"  -> ( / )
+      | "%"  -> ( mod )
+      | ">"  -> fun l r -> bool_to_int (l > r)
+      | "<"  -> fun l r -> bool_to_int (l < r)
+      | ">=" -> fun l r -> bool_to_int (l >= r)
+      | "<=" -> fun l r -> bool_to_int (l <= r)
+      | "==" -> fun l r -> bool_to_int (l == r)
+      | "!=" -> fun l r -> bool_to_int (l != r)
+      | "&&" -> fun l r -> bool_to_int (int_to_bool l && int_to_bool r)
+      | "!!" -> fun l r -> bool_to_int (int_to_bool l || int_to_bool r)
+      | _ -> failwith ("Unknown operator " ^ op)
+
+    let rec eval state exp =
+      match exp with
+      | Const const             -> const
+      | Var var                 -> state var
+      | Binop (op, left, right) -> (op_to_func op) (eval state left) (eval state right)
 
   end
-                    
+
 (* Simple statements: syntax and sematics *)
 module Stmt =
   struct
@@ -65,8 +87,13 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ = failwith "Not implemented yet"
-                                                         
+    let rec eval (state, io, out) stmt = 
+      match io, stmt with
+      | [],             Read var_name           -> failwith ("Read from empty input for " ^ var_name)
+      | value::rest_io, Read var_name           -> ((Expr.update var_name value state), rest_io, out)
+      | _,              Write expr              -> (state, io, out @ [Expr.eval state expr])
+      | _,              Assign (var_name, expr) -> ((Expr.update var_name (Expr.eval state expr) state), io, out)
+      | _,              Seq (stmt1, stmt2)      -> eval (eval (state, io, out) stmt1) stmt2
   end
 
 (* The top-level definitions *)

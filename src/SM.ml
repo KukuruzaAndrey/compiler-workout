@@ -22,9 +22,23 @@ type config = int list * Syntax.Stmt.config
      val eval : config -> prg -> config
 
    Takes a configuration and a program, and returns a configuration as a result
- *)                         
-let eval _ = failwith "Not yet implemented"
+ *)
+let eval_instruction (stack, (state, io, out)) insn =
+    match stack, io, insn with
+    | [],         _, BINOP op -> failwith ("Empty stack for operation " ^ op)
+    | x::[],      _, BINOP op -> failwith ("Only one of two values in stack for operation " ^ op)
+    | y::x::tail, _, BINOP op -> ((Syntax.Expr.op_to_func op x y)::tail, (state, io, out))
+    | _,          _, CONST c  -> (c::stack, (state, io, out))
+    | _,         [], READ     -> failwith ("Read from empty input")
+    | _,    z::tail, READ     -> (z::stack, (state, tail, out))
+    | [],         _, WRITE    -> failwith ("Write from empty stack")
+    | z::tail,    _, WRITE    -> (tail, (state, io, out @ [z]))
+    | _,          _, LD var   -> ((state var)::stack, (state, io, out))
+    | [],         _, ST var   -> failwith ("Store to variable" ^ var ^ " from empty stack")
+    | z::tail,    _, ST var   -> (tail, ((Syntax.Expr.update var z state), io, out)) 
 
+                   
+let eval config program = List.fold_left eval_instruction config program
 (* Top-level evaluation
 
      val run : int list -> prg -> int list
@@ -41,4 +55,15 @@ let run i p = let (_, (_, _, o)) = eval ([], (Syntax.Expr.empty, i, [])) p in o
    stack machine
  *)
 
-let compile _ = failwith "Not yet implemented"
+let rec compile_expr expr = 
+  match expr with
+  | Syntax.Expr.Const const             -> [CONST const]
+  | Syntax.Expr.Var   var               -> [LD var]
+  | Syntax.Expr.Binop (op, left, right) -> (compile_expr left) @ (compile_expr right) @ [BINOP op]
+
+let rec compile stmt =
+  match stmt with
+  | Syntax.Stmt.Read   var_name         -> READ :: [ST var_name]
+  | Syntax.Stmt.Write  expr             -> (compile_expr expr) @ [WRITE]
+  | Syntax.Stmt.Assign (var_name, expr) -> (compile_expr expr) @ [ST var_name]
+  | Syntax.Stmt.Seq    (stmt1, stmt2)   -> (compile stmt1) @ (compile stmt2)
